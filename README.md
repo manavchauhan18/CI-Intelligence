@@ -536,47 +536,4 @@ Orchestrator exposes metrics at `/metrics`:
 curl http://localhost:8001/metrics
 ```
 
-### OpenTelemetry
-
-Configure OTLP endpoint in `.env`:
-
-```bash
-OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
-ENABLE_TELEMETRY=true
-```
-
----
-
-## Resume-Ready Description
-
-> **Designed and implemented a production-grade multi-agent CI/CD intelligence platform** where autonomous agents collaboratively analyze code intent, security, performance, and test impact before deployment using **Python, FastAPI, Redis Streams, PostgreSQL, and LLMs (GPT-4/Claude)**. Implemented event-driven architecture with **horizontal scalability**, **fault tolerance**, and **weighted decision algorithms**. Deployed using **Docker, Kubernetes**, and integrated into CI/CD pipelines via **GitHub Actions**.
-
----
-
-## Contributing
-
-Contributions welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
-
----
-
-## License
-
-MIT License - see [LICENSE](LICENSE) file
-
----
-
-## Support
-
-- GitHub Issues: https://github.com/your-org/ci-intelligence/issues
-- Documentation: https://docs.ci-intelligence.dev
-- Email: support@ci-intelligence.dev
-
----
-
 **Built with ❤️ for production-grade Agent-to-Agent systems**
