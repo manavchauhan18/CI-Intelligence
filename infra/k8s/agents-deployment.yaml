@@ -1,0 +1,120 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: diff-agent
+  namespace: ci-intelligence
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: diff-agent
+  template:
+    metadata:
+      labels:
+        app: diff-agent
+    spec:
+      containers:
+      - name: diff-agent
+        image: ci-intelligence/diff-agent:latest
+        envFrom:
+        - configMapRef:
+            name: ci-intelligence-config
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: intent-agent
+  namespace: ci-intelligence
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: intent-agent
+  template:
+    metadata:
+      labels:
+        app: intent-agent
+    spec:
+      containers:
+      - name: intent-agent
+        image: ci-intelligence/intent-agent:latest
+        envFrom:
+        - configMapRef:
+            name: ci-intelligence-config
+        - secretRef:
+            name: ci-intelligence-secrets
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "400m"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: security-agent
+  namespace: ci-intelligence
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: security-agent
+  template:
+    metadata:
+      labels:
+        app: security-agent
+    spec:
+      containers:
+      - name: security-agent
+        image: ci-intelligence/security-agent:latest
+        envFrom:
+        - configMapRef:
+            name: ci-intelligence-config
+        - secretRef:
+            name: ci-intelligence-secrets
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "400m"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: arbiter-agent
+  namespace: ci-intelligence
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: arbiter-agent
+  template:
+    metadata:
+      labels:
+        app: arbiter-agent
+    spec:
+      containers:
+      - name: arbiter-agent
+        image: ci-intelligence/arbiter-agent:latest
+        envFrom:
+        - configMapRef:
+            name: ci-intelligence-config
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "400m"

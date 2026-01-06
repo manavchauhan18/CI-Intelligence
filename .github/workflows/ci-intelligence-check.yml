@@ -1,0 +1,154 @@
+name: CI Intelligence Check
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    name: Multi-Agent Code Analysis
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch full history for diff
+
+      - name: Get commit diff
+        id: diff
+        run: |
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            DIFF=$(git diff ${{ github.event.pull_request.base.sha }} ${{ github.sha }})
+          else
+            DIFF=$(git diff HEAD~1 HEAD)
+          fi
+
+          # Escape diff for JSON
+          DIFF_JSON=$(echo "$DIFF" | jq -Rs .)
+          echo "diff=$DIFF_JSON" >> $GITHUB_OUTPUT
+
+      - name: Submit to CI Intelligence Platform
+        id: submit
+        run: |
+          RESPONSE=$(curl -X POST \
+            -H "Content-Type: application/json" \
+            -H "X-Signature: ${{ secrets.CI_INTELLIGENCE_HMAC }}" \
+            -H "X-Timestamp: $(date +%s)" \
+            -d '{
+              "repo_name": "${{ github.repository }}",
+              "commit_hash": "${{ github.sha }}",
+              "commit_message": "${{ github.event.head_commit.message }}",
+              "diff": ${{ steps.diff.outputs.diff }},
+              "branch": "${{ github.ref_name }}",
+              "author": "${{ github.actor }}"
+            }' \
+            ${{ secrets.CI_INTELLIGENCE_URL }}/api/v1/analyze)
+
+          JOB_ID=$(echo $RESPONSE | jq -r '.job_id')
+          echo "job_id=$JOB_ID" >> $GITHUB_OUTPUT
+          echo "Submitted analysis job: $JOB_ID"
+
+      - name: Wait for analysis results
+        id: wait
+        run: |
+          JOB_ID="${{ steps.submit.outputs.job_id }}"
+          MAX_ATTEMPTS=60
+          ATTEMPT=0
+
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            RESPONSE=$(curl -s ${{ secrets.CI_INTELLIGENCE_URL }}/api/v1/jobs/$JOB_ID)
+            STATUS=$(echo $RESPONSE | jq -r '.status')
+
+            if [ "$STATUS" == "completed" ]; then
+              echo "Analysis completed"
+              echo "response=$RESPONSE" >> $GITHUB_OUTPUT
+              break
+            elif [ "$STATUS" == "failed" ]; then
+              echo "Analysis failed"
+              exit 1
+            fi
+
+            echo "Waiting for analysis... (attempt $ATTEMPT/$MAX_ATTEMPTS)"
+            sleep 10
+            ATTEMPT=$((ATTEMPT + 1))
+          done
+
+          if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
+            echo "Analysis timeout"
+            exit 1
+          fi
+
+      - name: Check release decision
+        run: |
+          RESPONSE='${{ steps.wait.outputs.response }}'
+          DECISION=$(echo $RESPONSE | jq -r '.decision')
+          EXPLANATION=$(echo $RESPONSE | jq -r '.explanation')
+
+          echo "==================================="
+          echo "CI Intelligence Analysis Results"
+          echo "==================================="
+          echo ""
+          echo "Decision: $DECISION"
+          echo ""
+          echo "Explanation:"
+          echo "$EXPLANATION"
+          echo ""
+          echo "==================================="
+
+          # Generate summary
+          echo "### CI Intelligence Analysis" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Decision:** \`$DECISION\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Details:**" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "$EXPLANATION" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+          # Fail if rejected
+          if [ "$DECISION" == "reject" ]; then
+            echo "❌ Release blocked by CI Intelligence Platform"
+            exit 1
+          elif [ "$DECISION" == "warn" ]; then
+            echo "⚠️  Release approved with warnings"
+          else
+            echo "✅ Release approved"
+          fi
+
+      - name: Comment on PR (if applicable)
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const response = JSON.parse('${{ steps.wait.outputs.response }}');
+            const decision = response.decision;
+            const explanation = response.explanation;
+
+            const icon = decision === 'reject' ? '❌' : decision === 'warn' ? '⚠️' : '✅';
+
+            const comment = `## ${icon} CI Intelligence Analysis
+
+**Decision:** \`${decision}\`
+
+<details>
+<summary>View Details</summary>
+
+\`\`\`
+${explanation}
+\`\`\`
+
+</details>
+
+---
+*Powered by [CI Intelligence Platform](https://github.com/your-org/ci-intelligence)*
+            `;
+
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: comment
+            });

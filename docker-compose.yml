@@ -1,0 +1,185 @@
+version: '3.8'
+
+services:
+  # Infrastructure
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: ci_intelligence
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # API Gateway
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.base
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/ci_intelligence
+      - REDIS_URL=redis://redis:6379/0
+      - GATEWAY_PORT=8000
+    volumes:
+      - ./gateway:/app/gateway
+      - ./shared:/app/shared
+    command: python gateway/main.py
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Orchestrator
+  orchestrator:
+    build:
+      context: .
+      dockerfile: Dockerfile.base
+    ports:
+      - "8001:8001"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/ci_intelligence
+      - REDIS_URL=redis://redis:6379/0
+      - ORCHESTRATOR_PORT=8001
+    volumes:
+      - ./orchestrator:/app/orchestrator
+      - ./shared:/app/shared
+    command: python orchestrator/main.py
+    depends_on:
+      - postgres
+      - redis
+      - gateway
+
+  # Diff Agent
+  diff-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile.base
+    ports:
+      - "8100:8100"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DIFF_AGENT_PORT=8100
+    volumes:
+      - ./agents:/app/agents
+      - ./shared:/app/shared
+    command: python agents/diff_agent/main.py
+    depends_on:
+      - redis
+
+  # Intent Agent
+  intent-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile.base
+    ports:
+      - "8101:8101"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - INTENT_AGENT_PORT=8101
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - DEFAULT_LLM_PROVIDER=${DEFAULT_LLM_PROVIDER:-openai}
+    volumes:
+      - ./agents:/app/agents
+      - ./shared:/app/shared
+    command: python agents/intent_agent/main.py
+    depends_on:
+      - redis
+
+  # Security Agent
+  security-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile.base
+    ports:
+      - "8102:8102"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - SECURITY_AGENT_PORT=8102
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    volumes:
+      - ./agents:/app/agents
+      - ./shared:/app/shared
+    command: python agents/security_agent/main.py
+    depends_on:
+      - redis
+
+  # Performance Agent
+  performance-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile.base
+    ports:
+      - "8103:8103"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - PERFORMANCE_AGENT_PORT=8103
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    volumes:
+      - ./agents:/app/agents
+      - ./shared:/app/shared
+    command: python agents/performance_agent/main.py
+    depends_on:
+      - redis
+
+  # Test Impact Agent
+  test-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile.base
+    ports:
+      - "8104:8104"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - TEST_AGENT_PORT=8104
+    volumes:
+      - ./agents:/app/agents
+      - ./shared:/app/shared
+    command: python agents/test_agent/main.py
+    depends_on:
+      - redis
+
+  # Release Arbiter Agent
+  arbiter-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile.base
+    ports:
+      - "8105:8105"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - ARBITER_AGENT_PORT=8105
+    volumes:
+      - ./agents:/app/agents
+      - ./shared:/app/shared
+    command: python agents/arbiter_agent/main.py
+    depends_on:
+      - redis
+
+volumes:
+  postgres_data:
+  redis_data:
