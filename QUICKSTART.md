@@ -25,7 +25,7 @@ nano .env
 
 ## Step 2: Start Services
 
-```bash
+```bash 
 # Start all services with Docker Compose
 docker-compose up -d
 
